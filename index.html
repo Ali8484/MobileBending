@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تأثير الجيروسكوب على زاوية المشهد</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background-color: #1a1a2e;
+      font-family: sans-serif;
+      overflow: hidden; /* لمنع التمرير أثناء الإمالة */
+    }
+
+    .scene {
+      perspective: 800px;
+      width: 80%;
+      max-width: 350px;
+      height: 250px;
+      margin-bottom: 30px;
+    }
+
+    .card {
+      width: 100%;
+      height: 100%;
+      border-radius: 20px;
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      font-size: 1.5rem;
+      font-weight: bold;
+      transform-style: preserve-3d;
+      transition: transform 0.1s ease-out;
+      will-change: transform;
+    }
+
+    #permission-btn {
+      padding: 12px 24px;
+      font-size: 1rem;
+      border: none;
+      border-radius: 8px;
+      background-color: #667eea;
+      color: white;
+      cursor: pointer;
+      display: none; /* سيظهر فقط على أجهزة iOS */
+    }
+  </style>
+</head>
+<body>
+
+  <div class="scene">
+    <div class="card" id="card">
+      <div>أمل الهاتف</div>
+    </div>
+  </div>
+
+  <button id="permission-btn">السماح بالوصول إلى الجيروسكوب</button>
+
+  <script>
+    const card = document.getElementById('card');
+    const permissionBtn = document.getElementById('permission-btn');
+
+    // متغيرات لتخزين قراءات البداية (المعايرة)
+    let initialGamma = null;
+    let initialBeta = null;
+    let isCalibrated = false;
+
+    // دالة معالجة حدث deviceorientation
+    function handleOrientation(event) {
+      const gamma = event.gamma; // الدوران حول المحور Y (يمين/يسار)
+      const beta = event.beta;   // الدوران حول المحور X (أمام/خلف)
+
+      // في بعض الأجهزة، قد تكون القراءة الأولى صفراً، لذا نتجاهلها
+      if (gamma === null || beta === null) return;
+
+      // --- مرحلة المعايرة (Calibration) ---
+      // نأخذ أول قراءة "حقيقية" ونعتبرها نقطة الصفر (0,0)
+      if (!isCalibrated) {
+        initialGamma = gamma;
+        initialBeta = beta;
+        isCalibrated = true;
+        return; // لا نطبق أي تحويل في أول قراءة
+      }
+
+      // --- حساب الفرق عن نقطة البداية ---
+      // هذا يضمن أن الوضع الذي فُتحت به الصفحة هو الوضع "الطبيعي" للبطاقة
+      const deltaGamma = gamma - initialGamma;
+      const deltaBeta = beta - initialBeta;
+
+      // --- تحويل الفرق إلى زوايا دوران ---
+      // نستخدم معامل حساسية لتقليل شدة الدوران
+      const sensitivity = 10;
+      
+      // نعكس إشارة beta لأن أنظمة الإحداثيات تختلف
+      const rotateY = deltaGamma / sensitivity;       // يمين/يسار
+      const rotateX = -deltaBeta / sensitivity;      // أمام/خلف
+
+      // تطبيق التحويل على البطاقة
+      // نستخدم rotateX و rotateY فقط للحفاظ على البساطة
+      card.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+    }
+
+    // دالة بدء الاستماع للأحداث
+    function startListening() {
+      if (window.DeviceOrientationEvent) {
+        window.addEventListener('deviceorientation', handleOrientation);
+        permissionBtn.style.display = 'none'; // إخفاء الزر بعد البدء
+      } else {
+        alert('عذراً، جهازك لا يدعم هذه الميزة.');
+      }
+    }
+
+    // --- التعامل مع أذونات iOS 13+ ---
+    // آبل تطلب من المستخدم منح الإذن يدوياً عبر نقرة على زر
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+      // الجهاز هو iOS 13+ ويتطلب إذناً صريحاً
+      permissionBtn.style.display = 'block'; // إظهار زر الإذن
+      
+      permissionBtn.addEventListener('click', async () => {
+        try {
+          const permissionState = await DeviceOrientationEvent.requestPermission();
+          if (permissionState === 'granted') {
+            startListening();
+          } else {
+            alert('تم رفض الإذن. لن يعمل تأثير الجيروسكوب.');
+          }
+        } catch (error) {
+          console.error('خطأ في طلب الإذن:', error);
+          alert('حدث خطأ أثناء طلب الإذن.');
+        }
+      });
+    } else {
+      // الأجهزة الأخرى (Android, Desktop) لا تحتاج إلى إذن مسبق
+      // نبدأ الاستماع مباشرة، ولكن قد ننتظر قليلاً حتى تستقر القراءات
+      if (window.DeviceOrientationEvent) {
+        // تأخير بسيط للمعايرة الأولية
+        setTimeout(startListening, 100);
+      }
+    }
+  </script>
+
+</body>
+</html>
